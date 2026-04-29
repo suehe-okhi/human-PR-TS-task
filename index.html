@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Door Game</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,700&family=DM+Sans:wght@300;400;500&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+
+:root {
+  --bg:#1c1a16;
+  --surface:#2c2920;
+  --surface2:#38352a;
+  --surface3:#46432f;
+  --text:#f8f4e8;
+  --text2:#c8bfa0;
+  --text3:#8a8060;
+  --gold:#f5c84a;
+  --gold-dim:#a07e28;
+  --gold-light:#fdf3d0;
+  --green:#52b788;
+  --red:#e05c4b;
+  --border:#4a4738;
+  --border2:#6a6450;
+}
+
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow:hidden; }
+
+.screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:opacity 0.4s ease; }
+.screen.hidden { opacity:0; pointer-events:none; }
+
+/* ── INTRO ── */
+#introScreen { background:var(--bg); padding:32px; }
+.intro-inner { max-width:420px; width:100%; display:flex; flex-direction:column; align-items:center; }
+
+.game-title { font-family:'Fraunces',serif; font-size:52px; font-weight:700; color:var(--gold); line-height:1; margin-bottom:22px; text-align:center; }
+
+.door-preview { display:flex; justify-content:center; margin-bottom:22px; }
+.door-mini { width:100px; height:140px; background:var(--surface2); border:2px solid var(--border2); border-radius:8px 8px 0 0; position:relative; display:flex; align-items:center; justify-content:center; }
+.door-mini::after { content:''; width:10px; height:10px; border-radius:50%; background:var(--gold); position:absolute; right:14px; top:50%; transform:translateY(-50%); box-shadow:0 0 8px rgba(245,200,74,0.7); }
+.door-mini-r { font-size:46px; opacity:0.75; }
+
+.intro-tagline { font-size:18px; color:var(--text2); text-align:center; margin-bottom:30px; font-weight:300; line-height:1.6; }
+.big-btn { width:100%; padding:16px; background:var(--gold); color:#1a1200; border:none; border-radius:10px; font-family:'DM Sans',sans-serif; font-size:16px; font-weight:600; cursor:pointer; letter-spacing:0.02em; transition:background 0.15s,transform 0.1s; }
+.big-btn:hover { background:#f8d460; transform:scale(1.01); }
+.big-btn:active { transform:scale(0.98); }
+
+/* ── TASK — shared ── */
+.task-left { flex:1; width:100%; display:flex; align-items:center; justify-content:center; position:relative; }
+
+.task-hdr { position:absolute; top:0;left:0;right:0; padding:13px 22px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); z-index:5; }
+.task-hdr-title { font-size:12px; color:var(--text3); letter-spacing:0.07em; text-transform:uppercase; }
+.timer-chip { font-family:'DM Mono',monospace; font-size:12px; color:var(--text2); letter-spacing:0.1em; background:var(--surface2); padding:4px 11px; border-radius:20px; border:1px solid var(--border); }
+
+/* Door */
+.door-wrap { position:relative; flex-shrink:0; }
+.door-frame { position:absolute; inset:0; border:3px solid var(--border2); border-radius:10px 10px 0 0; background:var(--surface3); overflow:hidden; }
+.door-reward-behind { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(160deg,#3a3420,#252210); opacity:0; transition:opacity 0.5s; filter:drop-shadow(0 0 18px rgba(245,200,74,0.55)); }
+.door-panel { position:absolute; inset:0; background:linear-gradient(160deg,#5e5540 0%,#3d3828 100%); border-radius:8px 8px 0 0; transform-origin:left center; transition:transform 1s cubic-bezier(0.34,1.1,0.64,1); border-left:2px solid #7a7060; border-top:1px solid #7a7060; }
+.door-panel.open { transform:perspective(600px) rotateY(-58deg); }
+.door-knob { position:absolute; top:50%; transform:translateY(-50%); border-radius:50%; background:var(--gold); box-shadow:0 0 12px rgba(245,200,74,0.7); }
+.door-inset { position:absolute; border:1px solid rgba(255,255,255,0.08); border-radius:4px; }
+
+.tap-hint { font-size:12px; color:var(--text3); letter-spacing:0.09em; text-transform:uppercase; text-align:center; }
+
+/* Door as the knock button */
+.door-knock-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: block;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  border-radius: 10px 10px 0 0;
+}
+.door-knock-btn:disabled { opacity:0.3; cursor:not-allowed; }
+
+@keyframes doorShake {
+  0%   { transform: rotate(0deg); }
+  18%  { transform: rotate(-4deg); }
+  36%  { transform: rotate(4deg); }
+  54%  { transform: rotate(-3deg); }
+  72%  { transform: rotate(3deg); }
+  100% { transform: rotate(0deg); }
+}
+.door-wrap.shaking { animation: doorShake 0.32s ease; }
+
+/* Bottom row: door hint + quit side by side */
+.task-controls-col {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Quit */
+.quit-btn { background:none; border:2px solid var(--border2); color:var(--text2); padding:18px 44px; border-radius:12px; font-family:'DM Sans',sans-serif; font-size:20px; font-weight:500; cursor:pointer; letter-spacing:0.02em; transition:border-color 0.15s,color 0.15s,background 0.15s; }
+.quit-btn:hover { border-color:var(--red); color:var(--red); background:rgba(224,92,75,0.06); }
+
+/* Confetti */
+.confetti-container { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:9; }
+.confetti-piece { position:absolute; top:-12px; border-radius:2px; animation:fall linear forwards; }
+@keyframes fall { 0%{transform:translateY(0) rotate(0deg);opacity:1} 80%{opacity:1} 100%{transform:translateY(110vh) rotate(720deg);opacity:0} }
+
+/* Reward overlay */
+.reward-overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:rgba(8,6,2,0.92); opacity:0; pointer-events:none; transition:opacity 0.4s ease; z-index:10; }
+.reward-overlay.visible { opacity:1; pointer-events:auto; }
+.r-ring  { position:absolute; width:280px; height:280px; border-radius:50%; border:2px solid var(--gold); animation:ringOut 2s ease-out infinite; }
+.r-ring2 { position:absolute; width:280px; height:280px; border-radius:50%; border:1px solid var(--gold); animation:ringOut 2s 0.7s ease-out infinite; opacity:0.6; }
+@keyframes ringOut { 0%{transform:scale(0.5);opacity:1} 100%{transform:scale(2.2);opacity:0} }
+.r-icon     { font-size:110px; line-height:1; animation:iconPop 0.9s cubic-bezier(0.34,1.56,0.64,1) both; position:relative; z-index:2; filter:drop-shadow(0 0 24px rgba(245,200,74,0.7)); }
+.r-headline { font-family:'Fraunces',serif; font-size:46px; font-weight:700; color:var(--gold); animation:slideUp 0.6s 0.3s cubic-bezier(0.34,1.4,0.64,1) both; position:relative; z-index:2; text-align:center; text-shadow:0 0 40px rgba(245,200,74,0.4); }
+.r-sub      { font-size:13px; color:rgba(255,255,255,0.5); letter-spacing:0.14em; text-transform:uppercase; animation:slideUp 0.6s 0.5s cubic-bezier(0.34,1.4,0.64,1) both; position:relative; z-index:2; }
+.r-continue { position:absolute; bottom:48px; left:50%; transform:translateX(-50%); padding:15px 44px; background:var(--gold); color:#1a1200; border:none; border-radius:10px; font-family:'DM Sans',sans-serif; font-size:15px; font-weight:600; cursor:pointer; letter-spacing:0.04em; transition:background 0.12s,transform 0.1s; animation:slideUp 0.6s 0.7s cubic-bezier(0.34,1.4,0.64,1) both; z-index:2; box-shadow:0 0 30px rgba(245,200,74,0.3); white-space:nowrap; }
+.r-continue:hover { background:#f8d460; transform:translateX(-50%) scale(1.03); }
+@keyframes iconPop { 0%{transform:scale(0) rotate(-25deg);opacity:0} 55%{transform:scale(1.25) rotate(10deg);opacity:1} 100%{transform:scale(1) rotate(0deg);opacity:1} }
+@keyframes slideUp { from{transform:translateY(28px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+/* column containers */
+.task-door-col { display:flex; flex-direction:column; align-items:center; gap:16px; }
+
+#taskScreen { flex-direction:column; }
+.task-left {
+  flex:1; width:100%;
+  display:flex; flex-direction:row;
+  align-items:center; justify-content:center;
+  padding:60px 48px 36px;
+  gap:0;
+  position:relative;
+}
+
+.task-door-col { margin-right:100px; }
+
+/* quit floats to the right */
+.task-controls-col {
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+}
+
+.door-wrap { width:200px; height:278px; }
+.door-reward-behind { font-size:82px; }
+.door-knob { right:20px; width:15px; height:15px; }
+.door-inset { inset:16px; }
+</style>
+</head>
+<body>
+
+<!-- INTRO -->
+<div class="screen" id="introScreen">
+  <div class="intro-inner">
+    <div class="game-title">The Door Game</div>
+
+    <div class="door-preview">
+      <div class="door-mini"><span class="door-mini-r">💰</span></div>
+    </div>
+
+    <p class="intro-tagline">A treasure is hidden behind a locked door.</p>
+
+    <button class="big-btn" onclick="startTask()">Open the first door →</button>
+  </div>
+</div>
+
+<!-- TASK -->
+<div class="screen hidden" id="taskScreen">
+  <div class="task-left" id="taskLeft">
+    <div class="task-hdr">
+      <span class="task-hdr-title">The Door Game</span>
+      <span class="timer-chip" id="timerDisplay">00:00:00</span>
+    </div>
+
+    <div class="task-door-col">
+      <button class="door-knock-btn" id="knockBtn" onclick="pressResponse()">
+        <div class="door-wrap">
+          <div class="door-frame">
+            <div class="door-reward-behind" id="doorReward">💰</div>
+            <div class="door-panel" id="doorPanel">
+              <div class="door-inset"></div>
+              <div class="door-knob"></div>
+            </div>
+          </div>
+        </div>
+      </button>
+      <p class="tap-hint">Tap the door to knock</p>
+    </div>
+
+    <div class="task-controls-col">
+      <button class="quit-btn" id="quitBtn" onclick="quitSession()">I give up</button>
+    </div>
+
+    <div class="confetti-container" id="confettiContainer"></div>
+
+    <div class="reward-overlay" id="rewardOverlay">
+      <div class="r-ring"></div>
+      <div class="r-ring2"></div>
+      <div class="r-icon" id="rIcon">💰</div>
+      <div class="r-headline" id="rHeadline">You got it!</div>
+      <div class="r-sub">reward #<span id="rNum">1</span></div>
+      <button class="r-continue" onclick="nextRatio()">Keep going →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ICONS    = ['💰','🌟','🏆','✨','🎊','🥳','💫','⭐','🔥','💥','💎','🍀'];
+const HEADLINES = ['Well done!','Good job!','Keep it up!','Brilliant!','Nice work!','Great effort!','Fantastic!','Superb!'];
+
+let S = freshState();
+function freshState() {
+  return { running:false, startTime:null, timerInterval:null,
+           rewards:0, totalPresses:0, currentPresses:0,
+           ratioIndex:0, currentRatio:1, breakpointRatio:0 };
+}
+
+function startTask() {
+  hide('introScreen'); show('taskScreen');
+  S.running = true;
+  S.startTime = Date.now();
+  S.timerInterval = setInterval(updateTimer, 1000);
+  S.currentRatio = ratio(0);
+}
+
+function ratio(n) { return 1 + 4 * n; }
+
+function pressResponse() {
+  if (!S.running) return;
+  S.currentPresses++;
+  S.totalPresses++;
+
+  // shake the door
+  const dw = el('knockBtn').querySelector('.door-wrap');
+  dw.classList.remove('shaking');
+  void dw.offsetWidth;
+  dw.classList.add('shaking');
+  dw.addEventListener('animationend', () => dw.classList.remove('shaking'), { once: true });
+
+  if (S.currentPresses >= S.currentRatio) triggerReward();
+}
+
+function triggerReward() {
+  S.rewards++;
+
+  el('rNum').textContent = S.rewards;
+  el('rIcon').textContent = ICONS[(S.rewards-1) % ICONS.length];
+  el('rHeadline').textContent = HEADLINES[(S.rewards-1) % HEADLINES.length];
+
+  el('doorReward').style.opacity = '1';
+  el('doorPanel').classList.add('open');
+
+  const ov = el('rewardOverlay');
+  ov.classList.remove('visible');
+  void ov.offsetWidth;
+  ov.classList.add('visible');
+  el('knockBtn').disabled = true;
+  el('quitBtn').disabled = true;
+
+  fireConfetti(130);
+}
+
+function nextRatio() {
+  S.ratioIndex++;
+  S.currentRatio = ratio(S.ratioIndex);
+  S.currentPresses = 0;
+
+  el('doorPanel').classList.remove('open');
+  el('rewardOverlay').classList.remove('visible');
+  el('knockBtn').disabled = false;
+  el('quitBtn').disabled = false;
+}
+
+function quitSession() {
+  clearInterval(S.timerInterval);
+  S.running = false;
+  hide('taskScreen'); show('introScreen');
+  // reset for next play
+  S = freshState();
+  el('doorPanel').classList.remove('open');
+  el('doorReward').style.opacity = '0';
+  el('rewardOverlay').classList.remove('visible');
+  el('knockBtn').disabled = false;
+  el('quitBtn').disabled = false;
+  el('confettiContainer').innerHTML = '';
+  el('timerDisplay').textContent = '00:00:00';
+}
+
+/* helpers */
+function el(id) { return document.getElementById(id); }
+function show(id) { el(id).classList.remove('hidden'); }
+function hide(id) { el(id).classList.add('hidden'); }
+
+function updateTimer() {
+  if (!S.startTime) return;
+  const s = Math.floor((Date.now()-S.startTime)/1000);
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  el('timerDisplay').textContent=[h,m,sec].map(v=>String(v).padStart(2,'0')).join(':');
+}
+
+function fireConfetti(n) {
+  const c = el('confettiContainer');
+  c.innerHTML = '';
+  const cols = ['#52b788','#e8b84b','#e07a2f','#e05c4b','#2d6a4f','#f4a261','#4a90d9'];
+  for (let i=0;i<n;i++) {
+    const p = document.createElement('div');
+    p.className = 'confetti-piece';
+    p.style.cssText=`left:${Math.random()*100}%;background:${cols[Math.floor(Math.random()*cols.length)]};animation-duration:${1.4+Math.random()*1.6}s;animation-delay:${Math.random()*0.4}s;width:${6+Math.random()*8}px;height:${6+Math.random()*8}px;border-radius:${Math.random()>.5?'50%':'2px'};`;
+    c.appendChild(p);
+  }
+  setTimeout(()=>c.innerHTML='',3400);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code==='Space' && !e.target.matches('button')) {
+    e.preventDefault();
+    if (S.running && !el('knockBtn').disabled) pressResponse();
+  }
+});
+</script>
+</body>
+</html>
